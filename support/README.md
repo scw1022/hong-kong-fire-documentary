@@ -10,9 +10,9 @@
 
 | 平台 | 連結 |
 |------|------|
-| **Google Sheet** | https://docs.google.com/spreadsheets/d/1yPrGPx0hsd3uIGEI8M23O1YOeT-kT96C_L6lr8yohvM/edit |
-| **報平安 APP** | https://taipo-fire.web.app/ |
-| **Notion 頁面** | https://www.notion.so/2b8ee44ca46980399694eaae7e8023a6?pvs=21 |
+| **Google Sheet** | <https://docs.google.com/spreadsheets/d/1yPrGPx0hsd3uIGEI8M23O1YOeT-kT96C_L6lr8yohvM/edit> |
+| **報平安 APP** | <https://taipo-fire.web.app/> |
+| **Notion 頁面** | <https://www.notion.so/2b8ee44ca46980399694eaae7e8023a6?pvs=21> |
 
 **說明**：居民和失聯人士家屬可透過多個平台報告狀況，確認人身安全。
 
@@ -20,7 +20,7 @@
 
 ### 1.2 宏福苑火警尋親庇護中心即時名單
 
-- **網址**：https://tai-po-wangfuk-fire-family-search.vercel.app/
+- **網址**：<https://tai-po-wangfuk-fire-family-search.vercel.app/>
 - **用途**：實時查詢庇護中心現時名單，協助尋找失聯親友
 
 ---
@@ -29,7 +29,7 @@
 
 ### 2.1 大埔火災資源整合
 
-- **網址**：https://taiporesources.vercel.app/
+- **網址**：<https://taiporesources.vercel.app/>
 - **功能**：集合物資、避難中心、心理支援等各類資源
 - **提交資源**：平台提供回報功能，讓市民上報新的支援資訊
 - **首次推出**：2025年11月28日00:11
@@ -38,16 +38,16 @@
 
 ### 2.2 大埔宏福苑協尋與救助平台（宏福苑互助）
 
-- **網址**：https://taipo1126.com/
+- **網址**：<https://taipo1126.com/>
 - **功能**：整合協尋、救助、義工招募等功能
-- **義工招募**：https://taipo1126.com/volunteer/tasks
+- **義工招募**：<https://taipo1126.com/volunteer/tasks>
 - **首次推出**：2025年11月28日00:36
 
 ---
 
 ### 2.3 宏福苑消息
 
-- **網址**：https://blaze-info.vercel.app/
+- **網址**：<https://blaze-info.vercel.app/>
 - **功能**：
   - 緊急消息更新
   - 避難中心資訊
@@ -59,7 +59,7 @@
 
 ### 2.4 大埔火警危機支援 - 社區資源管理
 
-- **網址**：https://supporttaipohk.com/
+- **網址**：<https://supporttaipohk.com/>
 - **核心功能**：
   - **上傳資源**：市民可上報支援資訊，由AI初步整合
   - **義工定位**：使用GPS追蹤當值義工位置（無人力調度功能）
@@ -72,7 +72,7 @@
 
 ### 2.5 大埔宏福苑緊急資源簿
 
-- **網址**：https://v0-emergency-resource-app-neon.vercel.app/
+- **網址**：<https://v0-emergency-resource-app-neon.vercel.app/>
 - **首次推出**：2025年11月28日02:10
 
 ---
@@ -82,7 +82,7 @@
 ### 3.1 香港大埔火災物資分佈地圖
 
 - **名稱**：Hong Kong Tai Po Fire Resources 202511
-- **網址**：https://experience.arcgis.com/experience/22b9d309e69548f28d2f4055d4de5ace
+- **網址**：<https://experience.arcgis.com/experience/22b9d309e69548f28d2f4055d4de5ace>
 - **功能**：地圖標示各避難中心、物資站、支援點位置
 - **首次推出**：2025年11月28日02:16
 
@@ -92,7 +92,7 @@
 
 ### 4.1 大埔宏福苑互助站
 
-- **網址**：https://wangfuk-fire-sos.netlify.app/
+- **網址**：<https://wangfuk-fire-sos.netlify.app/>
 - **功能**：整合多類支援資訊的綜合平台
 - **首次推出**：2025年11月28日02:36
 
@@ -103,7 +103,7 @@
 ### 5.1 Telegram 群組
 
 - **群組名稱**：[即時]緊貼大埔火災時事
-- **連結**：https://t.me/Taipohelper
+- **連結**：<https://t.me/Taipohelper>
 - **用途**：實時發佈與分享火災相關消息和資源更新
 
 ---
@@ -112,7 +112,7 @@
 
 ### 6.1 【大埔火災全港資源整合】網站
 
-- **網址**：https://www.notion.so/2b797bbbedf88061b0b3f8970b8642a7?pvs=21
+- **網址**：<https://www.notion.so/2b797bbbedf88061b0b3f8970b8642a7?pvs=21>
 - **核心功能**：
   - **十大資源一覽表**：由義工核實並標記準確度等級
   - **詳細操作指南**：說明資源使用方法及信息處理流程
