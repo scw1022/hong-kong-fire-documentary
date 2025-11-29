@@ -4,6 +4,18 @@
 
 本存庫旨在整理及保存 2025 年 11 月 26 日大埔宏福苑火災的公開資料，包括新聞報道、影片紀錄、技術分析、承辦商資料、義工及社區支援資訊、官方回應，以及事件後續的相關資料。目標為建立一個公開、集中及可查證的紀錄庫，方便學術界、媒體、工程界及關注事件的市民查閱。
 
+## 目錄 (Table of Contents)
+
+- [一、目的](#一目的)
+- [二、事件概述](#二事件概述)
+- [三、存庫內容架構](#三存庫內容架構)
+- [四、主要研究與技術議題](#四主要研究與技術議題)
+- [五、社區參與方式](#五社區參與方式)
+- [六、聲明](#六聲明)
+- [七、如何提交 Issue 或 Pull Request](#七如何提交-issue-或-pull-request)
+- [八、技術資源 (Technical Resources)](#八技術資源-technical-resources)
+- [English Version](#english-version)
+
 ## 一、目的
 
 - 記錄火災事件的公開資料（影片、新聞、文件）
@@ -177,6 +189,17 @@ Pull Request 適用於：
 # 11.26 Tai Po Wang Fuk Court Fire Documentary
 
 This repository aims to collect, organize, and preserve publicly available information related to the Wang Fuk Court fire in Tai Po on 26 November 2025. Materials include news reports, video footage, technical analyses, contractor information, volunteer and community support resources, official statements, and follow-up developments. The objective is to build a public, centralized, and verifiable archive for researchers, media, engineers, and concerned members of the public.
+
+## Table of Contents
+
+- [1. Purpose](#1-purpose)
+- [2. Incident Overview](#2-incident-overview)
+- [3. Repository Structure](#3-repository-structure)
+- [4. Key Technical and Research Topics](#4-key-technical-and-research-topics)
+- [5. Public Contribution](#5-public-contribution)
+- [6. Disclaimer](#6-disclaimer)
+- [7. How to Submit an Issue or Pull Request](#7-how-to-submit-an-issue-or-pull-request)
+- [8. Technical Resources](#8-technical-resources)
 
 ## 1. Purpose
 
