@@ -241,6 +241,7 @@ To ensure documents can serve as valid evidence, please include the following in
 - Helps verify file integrity for legal/archival purposes.
 - Mac/Linux command: `shasum -a 256 filename.pdf`
 - Windows command: `certutil -hashfile filename.pdf SHA256`
+- Windows PowerShell command: `Get-FileHash filename.pdf`
 
 **4. Collection Method**
 

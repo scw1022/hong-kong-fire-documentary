@@ -27,10 +27,10 @@ Close-up shot clearly showing large orange and yellow flames behind green scaffo
 
 ## Technical Information
 
-- **File Hash (SHA-256)**: [To be filled]
-- **Duration**: [To be filled]
-- **Resolution**: [To be filled]
-- **File Size**: [To be filled]
+- **File Hash (SHA-256)**: B7B2DACCA47F72302886FB5F2A9FA6FDCE6E59DB64421F50EBE4F07DEFEC07AD
+- **Duration**: 16.671s
+- **Resolution**: 1280x720
+- **File Size**: 5.22 MiB
 
 ## Notes
 

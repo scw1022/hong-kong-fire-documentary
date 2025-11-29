@@ -3,7 +3,7 @@
 ## Basic Information
 
 - **File Name**: `2025-11-26_threads_DRgr4zOgdp7_01.mp4`
-- **Title**: Ground-level shot showing fire spreading upward from lower floors
+- **Title**: Ground-level shot showing fire spreading upwards from lower floors
 - **Video Link**: [2025-11-26_threads_DRgr4zOgdp7_01.mp4](2025-11-26_threads_DRgr4zOgdp7_01.mp4)
 
 ## Source Information
@@ -27,10 +27,10 @@ Ground-level shot with trees in foreground, showing flames and smoke behind gree
 
 ## Technical Information
 
-- **File Hash (SHA-256)**: [To be filled]
-- **Duration**: [To be filled]
-- **Resolution**: [To be filled]
-- **File Size**: [To be filled]
+- **File Hash (SHA-256)**: 813B562FCC98D6AE4BE87B0CCC7411424A3AD612335EDBDF6DAAE707C2649DF5
+- **Duration**: 30.719s
+- **Resolution**: 1280x720
+- **File Size**: 11.8 MiB
 
 ## Notes
 

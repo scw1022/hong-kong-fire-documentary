@@ -27,10 +27,10 @@ Showing widespread fire across a vertical section of the structure, with green n
 
 ## Technical Information
 
-- **File Hash (SHA-256)**: [To be filled]
-- **Duration**: [To be filled]
-- **Resolution**: [To be filled]
-- **File Size**: [To be filled]
+- **File Hash (SHA-256)**: 84C5D5E06998EF2B141E0E708365EBA8EFD244AEA6D47DE99F7A0CC1D22AC1F8
+- **Duration**: 28.351s
+- **Resolution**: 1280x720
+- **File Size**: 9.40 MiB
 
 ## Notes
 

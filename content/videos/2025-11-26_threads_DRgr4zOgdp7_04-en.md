@@ -27,10 +27,10 @@ Wider view or different angle showing a hazy, smoke-filled environment with chai
 
 ## Technical Information
 
-- **File Hash (SHA-256)**: [To be filled]
-- **Duration**: [To be filled]
-- **Resolution**: [To be filled]
-- **File Size**: [To be filled]
+- **File Hash (SHA-256)**: 6AB4734FD57897322A7B01B2612F8C665F54E85253EF3101BEAA930B0B31CE64
+- **Duration**: 43.769s
+- **Resolution**: 1280x720
+- **File Size**: 8.07 MiB
 
 ## Notes
 
