@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import functools
 import json
 import logging
 import os
@@ -29,6 +30,46 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Callable, TypeVar
+
+T = TypeVar("T")
+
+
+def retry_on_failure(max_retries: int = 3, delay: float = 5, backoff: float = 2, exceptions: tuple = (Exception,)):
+    """
+    Decorator for retrying operations with exponential backoff.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        delay: Initial delay between retries in seconds
+        backoff: Multiplier for delay after each retry
+        exceptions: Tuple of exceptions to catch and retry on
+    """
+
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> T:
+            current_delay = delay
+            last_exception = None
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        logging.warning(f"{func.__name__} failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                        logging.info(f"Retrying in {current_delay:.1f}s...")
+                        time.sleep(current_delay)
+                        current_delay *= backoff
+                    else:
+                        logging.error(f"{func.__name__} failed after {max_retries + 1} attempts: {e}")
+
+            raise last_exception
+
+        return wrapper
+
+    return decorator
 
 # Project paths
 SCRIPT_DIR = Path(__file__).parent.resolve()
@@ -147,6 +188,186 @@ def setup_git_remotes():
     logging.info("Configured origin remote")
 
 
+def recover_git_state():
+    """
+    Recover from bad git state (merge conflicts, detached HEAD, etc.).
+    This is a nuclear option that resets everything to a clean state.
+    """
+    logging.warning("Recovering git state...")
+
+    # Abort any in-progress operations
+    run_cmd(["git", "merge", "--abort"], check=False)
+    run_cmd(["git", "rebase", "--abort"], check=False)
+    run_cmd(["git", "cherry-pick", "--abort"], check=False)
+
+    # Clear any stashes to avoid conflicts
+    run_cmd(["git", "stash", "clear"], check=False)
+
+    # Fetch latest from remotes
+    run_cmd(["git", "fetch", "origin"], check=False)
+    run_cmd(["git", "fetch", "upstream"], check=False)
+
+    # Force checkout main branch
+    run_cmd(["git", "checkout", "-f", MAIN_BRANCH], check=False)
+
+    # Reset to origin/main (our fork's main)
+    run_cmd(["git", "reset", "--hard", f"origin/{MAIN_BRANCH}"], check=False)
+
+    # Clean untracked files (but not ignored ones like logs/)
+    run_cmd(["git", "clean", "-fd"], check=False)
+
+    logging.info("Git state recovered - reset to origin/main")
+
+
+def push_to_origin_with_retry() -> bool:
+    """
+    Push to origin, handling rejections by pulling first.
+    Returns True on success, False on failure.
+    """
+    max_attempts = 3
+
+    for attempt in range(max_attempts):
+        result = run_cmd(["git", "push", "origin", MAIN_BRANCH], check=False)
+
+        if result.returncode == 0:
+            logging.info("Pushed to origin successfully")
+            return True
+
+        stderr = result.stderr.lower()
+
+        # Check if rejection is due to diverged history
+        if "rejected" in stderr or "fetch first" in stderr or "non-fast-forward" in stderr:
+            logging.warning(f"Push rejected (attempt {attempt + 1}/{max_attempts}), pulling and merging...")
+
+            # Pull with merge strategy
+            pull_result = run_cmd(
+                ["git", "pull", "origin", MAIN_BRANCH, "--no-rebase", "--no-edit"],
+                check=False,
+            )
+
+            if pull_result.returncode != 0:
+                # Pull failed, might be merge conflict
+                if "conflict" in pull_result.stderr.lower():
+                    logging.error("Merge conflict during pull, recovering...")
+                    recover_git_state()
+                    return False
+
+            # Small delay before retry
+            time.sleep(2**attempt)
+        else:
+            # Some other error (network, auth, etc.)
+            logging.error(f"Push failed with unexpected error: {result.stderr}")
+            time.sleep(2**attempt)
+
+    logging.error(f"Failed to push after {max_attempts} attempts")
+    return False
+
+
+def validate_and_repair_registry() -> bool:
+    """
+    Check if the registry JSON is valid, repair if corrupted.
+    Returns True if registry is valid (or was repaired), False if repair failed.
+    """
+    registry_file = SCRIPT_DIR / "scraped_urls.json"
+
+    # Check if file exists
+    if not registry_file.exists():
+        logging.info("Registry file doesn't exist, will be created on first scrape")
+        return True
+
+    # Try to load as JSON
+    try:
+        with open(registry_file, encoding="utf-8") as f:
+            content = f.read()
+
+        # Check for merge conflict markers
+        if "<<<<<<" in content or "======" in content or ">>>>>>" in content:
+            raise ValueError("Merge conflict markers found in registry")
+
+        json.loads(content)
+        return True
+
+    except (json.JSONDecodeError, ValueError) as e:
+        logging.warning(f"Registry corrupted: {e}")
+        logging.info("Attempting to repair by fetching from upstream...")
+
+        try:
+            # Fetch upstream first
+            run_cmd(["git", "fetch", "upstream", MAIN_BRANCH], check=False)
+
+            # Try to get the file from upstream
+            result = run_cmd(
+                ["git", "show", f"upstream/{MAIN_BRANCH}:scripts/scraper/scraped_urls.json"],
+                check=False,
+            )
+
+            if result.returncode == 0 and result.stdout:
+                # Validate the upstream version
+                json.loads(result.stdout)
+
+                # Write it
+                with open(registry_file, "w", encoding="utf-8") as f:
+                    f.write(result.stdout)
+
+                logging.info("Registry repaired from upstream")
+                return True
+
+        except Exception as repair_error:
+            logging.error(f"Failed to repair registry: {repair_error}")
+
+        # Last resort: backup corrupted file and create empty registry
+        backup_file = registry_file.with_suffix(".json.corrupted")
+        registry_file.rename(backup_file)
+        logging.warning(f"Corrupted registry backed up to {backup_file}")
+
+        with open(registry_file, "w", encoding="utf-8") as f:
+            json.dump({"scraped_urls": {}, "last_updated": datetime.now().isoformat()}, f, indent=2)
+
+        logging.info("Created new empty registry")
+        return True
+
+
+def health_check() -> bool:
+    """
+    Verify the daemon can operate properly.
+    Returns True if all checks pass, False otherwise.
+    """
+    checks_passed = True
+
+    # Check gh CLI authentication
+    if not check_gh_auth():
+        logging.error("Health check failed: gh CLI not authenticated")
+        checks_passed = False
+
+    # Check git status is clean enough to operate
+    result = run_cmd(["git", "status", "--porcelain"], check=False)
+    if result.returncode != 0:
+        logging.error("Health check failed: git status command failed")
+        checks_passed = False
+
+    # Check we're on the main branch
+    result = run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"], check=False)
+    if result.returncode == 0:
+        current_branch = result.stdout.strip()
+        if current_branch != MAIN_BRANCH:
+            logging.warning(f"Health check: on branch '{current_branch}', expected '{MAIN_BRANCH}'")
+            run_cmd(["git", "checkout", MAIN_BRANCH], check=False)
+
+    # Check registry is valid
+    if not validate_and_repair_registry():
+        logging.error("Health check failed: registry invalid and could not be repaired")
+        checks_passed = False
+
+    # Check remotes are configured
+    result = run_cmd(["git", "remote", "-v"], check=False)
+    if "origin" not in result.stdout or "upstream" not in result.stdout:
+        logging.warning("Health check: remotes not configured, setting up...")
+        setup_git_remotes()
+
+    return checks_passed
+
+
+@retry_on_failure(max_retries=3, delay=5, backoff=2)
 def sync_with_upstream() -> bool:
     """
     Sync local repo with upstream.
@@ -154,35 +375,46 @@ def sync_with_upstream() -> bool:
     """
     logging.info("Syncing with upstream...")
 
-    try:
-        # Fetch upstream
-        run_cmd(["git", "fetch", "upstream", MAIN_BRANCH])
+    # Fetch upstream
+    run_cmd(["git", "fetch", "upstream", MAIN_BRANCH])
 
-        # Check if we're behind upstream
-        result = run_cmd(["git", "rev-list", "--count", f"HEAD..upstream/{MAIN_BRANCH}"])
-        commits_behind = int(result.stdout.strip())
+    # Check if we're behind upstream
+    result = run_cmd(["git", "rev-list", "--count", f"HEAD..upstream/{MAIN_BRANCH}"])
+    commits_behind = int(result.stdout.strip())
 
-        if commits_behind > 0:
-            logging.info(f"Behind upstream by {commits_behind} commits, merging...")
+    if commits_behind > 0:
+        logging.info(f"Behind upstream by {commits_behind} commits, merging...")
 
-            # Stash any local changes
-            run_cmd(["git", "stash"], check=False)
+        # Stash any local changes
+        run_cmd(["git", "stash", "--include-untracked"], check=False)
 
-            # Checkout main and merge upstream
-            run_cmd(["git", "checkout", MAIN_BRANCH])
-            run_cmd(["git", "merge", f"upstream/{MAIN_BRANCH}", "--no-edit"])
+        # Checkout main and merge upstream
+        run_cmd(["git", "checkout", MAIN_BRANCH])
 
-            # Pop stash if exists
-            run_cmd(["git", "stash", "pop"], check=False)
+        # Try to merge
+        merge_result = run_cmd(["git", "merge", f"upstream/{MAIN_BRANCH}", "--no-edit"], check=False)
 
-            logging.info("Synced with upstream successfully")
-            return True
-        else:
-            logging.info("Already up to date with upstream")
-            return False
+        if merge_result.returncode != 0:
+            # Merge failed, likely conflict
+            stderr = merge_result.stderr.lower()
+            if "conflict" in stderr or "merge" in stderr:
+                logging.error("Merge conflict detected, aborting and recovering...")
+                run_cmd(["git", "merge", "--abort"], check=False)
+                run_cmd(["git", "stash", "pop"], check=False)
+                # Re-raise to trigger retry or recovery
+                raise RuntimeError(f"Merge conflict during upstream sync: {merge_result.stderr}")
 
-    except Exception as e:
-        logging.error(f"Failed to sync with upstream: {e}")
+        # Pop stash if exists
+        stash_result = run_cmd(["git", "stash", "pop"], check=False)
+        if stash_result.returncode != 0 and "No stash" not in stash_result.stderr:
+            # Stash pop failed (conflict with stashed changes)
+            logging.warning("Stash pop failed, dropping stash to continue")
+            run_cmd(["git", "stash", "drop"], check=False)
+
+        logging.info("Synced with upstream successfully")
+        return True
+    else:
+        logging.info("Already up to date with upstream")
         return False
 
 
@@ -260,39 +492,35 @@ def commit_changes() -> bool:
         return False
 
 
+@retry_on_failure(max_retries=2, delay=3, backoff=2)
 def get_open_pr() -> dict | None:
     """Check if there's an existing open PR from the scraper branch using gh CLI"""
     fork_owner = get_fork_owner()
 
-    try:
-        result = run_cmd(
-            [
-                "gh",
-                "pr",
-                "list",
-                "--repo",
-                UPSTREAM_REPO,
-                "--head",
-                f"{fork_owner}:{PR_BRANCH}",
-                "--state",
-                "open",
-                "--json",
-                "number,url",
-                "--limit",
-                "1",
-            ],
-            check=False,
-        )
+    result = run_cmd(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            UPSTREAM_REPO,
+            "--head",
+            f"{fork_owner}:{PR_BRANCH}",
+            "--state",
+            "open",
+            "--json",
+            "number,url",
+            "--limit",
+            "1",
+        ],
+        check=False,
+    )
 
-        if result.returncode == 0 and result.stdout.strip():
-            prs = json.loads(result.stdout)
-            if prs:
-                return prs[0]
-        return None
-
-    except Exception as e:
-        logging.error(f"Failed to check for open PRs: {e}")
-        return None
+    if result.returncode == 0 and result.stdout.strip():
+        prs = json.loads(result.stdout)
+        if prs:
+            return prs[0]
+    return None
 
 
 def close_pr(pr_number: int) -> bool:
@@ -307,47 +535,59 @@ def close_pr(pr_number: int) -> bool:
         return False
 
 
+@retry_on_failure(max_retries=2, delay=3, backoff=2)
 def push_to_pr_branch() -> bool:
     """Push changes to the PR branch (force push to keep clean history)"""
     logging.info(f"Pushing to branch '{PR_BRANCH}'...")
 
+    original_branch = None
+    stashed = False
+
     try:
+        # Remember current branch
+        result = run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"], check=False)
+        if result.returncode == 0:
+            original_branch = result.stdout.strip()
+
         # Stash any uncommitted changes (like log file updates) before switching branches
-        run_cmd(["git", "stash", "--include-untracked"], check=False)
+        stash_result = run_cmd(["git", "stash", "--include-untracked"], check=False)
+        stashed = "No local changes" not in stash_result.stdout
 
-        # Create or checkout the PR branch
-        result = run_cmd(["git", "branch", "--list", PR_BRANCH], check=False)
+        # Delete local PR branch if exists (to avoid conflicts)
+        run_cmd(["git", "branch", "-D", PR_BRANCH], check=False)
 
-        if PR_BRANCH in result.stdout:
-            # Branch exists, checkout and reset to main
-            run_cmd(["git", "checkout", PR_BRANCH])
-            run_cmd(["git", "reset", "--hard", MAIN_BRANCH])
+        # Create new branch from main
+        run_cmd(["git", "checkout", "-b", PR_BRANCH, MAIN_BRANCH])
+
+        # Force push to origin with retry
+        for attempt in range(3):
+            push_result = run_cmd(["git", "push", "origin", PR_BRANCH, "--force"], check=False)
+            if push_result.returncode == 0:
+                break
+            logging.warning(f"Push attempt {attempt + 1} failed: {push_result.stderr}")
+            time.sleep(2**attempt)
         else:
-            # Create new branch from main
-            run_cmd(["git", "checkout", "-b", PR_BRANCH, MAIN_BRANCH])
-
-        # Force push to origin using gh for authentication
-        run_cmd(["gh", "repo", "sync", "--source", f".:{PR_BRANCH}", "--force"], check=False)
-        # Fallback to git push
-        run_cmd(["git", "push", "origin", PR_BRANCH, "--force"])
-
-        # Go back to main
-        run_cmd(["git", "checkout", MAIN_BRANCH])
-
-        # Restore stashed changes
-        run_cmd(["git", "stash", "pop"], check=False)
+            raise RuntimeError(f"Failed to push PR branch after 3 attempts: {push_result.stderr}")
 
         logging.info(f"Pushed to {PR_BRANCH}")
         return True
 
     except Exception as e:
         logging.error(f"Failed to push: {e}")
-        # Try to get back to main and restore stash
-        run_cmd(["git", "checkout", MAIN_BRANCH], check=False)
-        run_cmd(["git", "stash", "pop"], check=False)
-        return False
+        raise
+
+    finally:
+        # Always try to get back to original branch and restore stash
+        target_branch = original_branch or MAIN_BRANCH
+        run_cmd(["git", "checkout", target_branch], check=False)
+        if stashed:
+            pop_result = run_cmd(["git", "stash", "pop"], check=False)
+            if pop_result.returncode != 0 and "No stash" not in pop_result.stderr:
+                logging.warning("Failed to restore stash, dropping it")
+                run_cmd(["git", "stash", "drop"], check=False)
 
 
+@retry_on_failure(max_retries=2, delay=3, backoff=2)
 def create_pr() -> bool:
     """Create a new PR to upstream using gh CLI"""
     fork_owner = get_fork_owner()
@@ -355,11 +595,14 @@ def create_pr() -> bool:
     # Get count of archives for PR description
     archives_dir = PROJECT_ROOT / "content" / "news"
     archive_count = 0
-    for source_dir in archives_dir.iterdir():
-        if source_dir.is_dir():
-            archive_dir = source_dir / "archive"
-            if archive_dir.exists():
-                archive_count += len(list(archive_dir.iterdir()))
+    try:
+        for source_dir in archives_dir.iterdir():
+            if source_dir.is_dir():
+                archive_dir = source_dir / "archive"
+                if archive_dir.exists():
+                    archive_count += len(list(archive_dir.iterdir()))
+    except Exception:
+        pass  # Don't fail PR creation if we can't count archives
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -375,45 +618,39 @@ This PR was automatically generated by the news scraper daemon.
 ### What's included
 - Scraped HTML archives of news articles
 - Updated URL registry to prevent duplicates
-- Scraper activity logs
 
 ---
 *This PR will be automatically replaced if not merged before the next hourly update.*
 """
 
-    try:
-        result = run_cmd(
-            [
-                "gh",
-                "pr",
-                "create",
-                "--repo",
-                UPSTREAM_REPO,
-                "--head",
-                f"{fork_owner}:{PR_BRANCH}",
-                "--base",
-                MAIN_BRANCH,
-                "--title",
-                title,
-                "--body",
-                body,
-            ],
-            check=False,
-        )
+    result = run_cmd(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            UPSTREAM_REPO,
+            "--head",
+            f"{fork_owner}:{PR_BRANCH}",
+            "--base",
+            MAIN_BRANCH,
+            "--title",
+            title,
+            "--body",
+            body,
+        ],
+        check=False,
+    )
 
-        if result.returncode == 0:
-            pr_url = result.stdout.strip()
-            logging.info(f"Created PR: {pr_url}")
-            return True
-        elif "already exists" in result.stderr.lower():
-            logging.info("PR already exists")
-            return True
-        else:
-            logging.error(f"Failed to create PR: {result.stderr}")
-            return False
-
-    except Exception as e:
-        logging.error(f"Failed to create PR: {e}")
+    if result.returncode == 0:
+        pr_url = result.stdout.strip()
+        logging.info(f"Created PR: {pr_url}")
+        return True
+    elif "already exists" in result.stderr.lower():
+        logging.info("PR already exists")
+        return True
+    else:
+        logging.error(f"Failed to create PR: {result.stderr}")
         return False
 
 
@@ -437,26 +674,8 @@ def manage_pr():
     create_pr()
 
 
-def commit_logs():
-    """Commit log file changes"""
-    if not LOG_FILE.exists():
-        return
-
-    try:
-        run_cmd(["git", "add", str(LOG_FILE)])
-
-        # Check if there are staged changes for the log file
-        result = run_cmd(["git", "diff", "--cached", "--name-only"])
-        if "logs/scraper.log" in result.stdout:
-            run_cmd(["git", "commit", "-m", "chore(logs): update scraper logs"])
-            logging.info("Committed log updates")
-
-    except Exception as e:
-        logging.debug(f"No log changes to commit: {e}")
-
-
 def run_daemon(run_once: bool = False):
-    """Main daemon loop"""
+    """Main daemon loop with robust error handling for 24/7 operation"""
     logger = setup_logging()
 
     logger.info("=" * 60)
@@ -475,50 +694,85 @@ def run_daemon(run_once: bool = False):
     # Setup git remotes
     setup_git_remotes()
 
+    # Initial health check
+    if not health_check():
+        logging.warning("Initial health check failed, attempting recovery...")
+        recover_git_state()
+
     last_sync = datetime.min
     last_pr = datetime.min
+    last_health_check = datetime.min
+    consecutive_failures = 0
+    max_consecutive_failures = 5
 
-    try:
-        while True:
+    while True:
+        try:
             now = datetime.now()
+
+            # Periodic health check (every 6 hours)
+            if now - last_health_check >= timedelta(hours=6):
+                logging.info("-" * 40)
+                logging.info("Running periodic health check...")
+                if health_check():
+                    logging.info("Health check passed")
+                    consecutive_failures = 0
+                else:
+                    logging.warning("Health check failed, recovering...")
+                    recover_git_state()
+                last_health_check = now
 
             # Check if it's time to sync (every 10 minutes)
             if now - last_sync >= timedelta(minutes=SYNC_INTERVAL_MINUTES):
                 logging.info("-" * 40)
                 logging.info("Starting sync cycle...")
 
-                # Sync with upstream
-                sync_with_upstream()
+                try:
+                    # Validate registry before scraping
+                    validate_and_repair_registry()
 
-                # Run scraper
-                success, failed = run_scraper()
-                if success > 0 or failed > 0:
-                    logging.info(f"Scraper results: {success} success, {failed} failed")
+                    # Sync with upstream
+                    sync_with_upstream()
 
-                # Commit any changes
-                commit_changes()
+                    # Run scraper
+                    success, failed = run_scraper()
+                    if success > 0 or failed > 0:
+                        logging.info(f"Scraper results: {success} success, {failed} failed")
 
-                # Commit logs
-                commit_logs()
+                    # Commit any changes
+                    commit_changes()
 
-                last_sync = now
-                logging.info("Sync cycle complete")
+                    last_sync = now
+                    consecutive_failures = 0
+                    logging.info("Sync cycle complete")
+
+                except Exception as e:
+                    consecutive_failures += 1
+                    logging.error(f"Sync cycle failed: {e}")
+
+                    if consecutive_failures >= max_consecutive_failures:
+                        logging.error(f"Too many consecutive failures ({consecutive_failures}), recovering git state...")
+                        recover_git_state()
+                        consecutive_failures = 0
 
             # Check if it's time to create/update PR (every hour)
             if now - last_pr >= timedelta(minutes=PR_INTERVAL_MINUTES):
                 logging.info("-" * 40)
                 logging.info("Starting PR cycle...")
 
-                # Push to fork first
                 try:
-                    run_cmd(["git", "push", "origin", MAIN_BRANCH])
-                except Exception:
-                    pass
+                    # Push to fork first with retry logic
+                    push_to_origin_with_retry()
 
-                manage_pr()
+                    # Manage PR (push to PR branch, create/update PR)
+                    manage_pr()
 
-                last_pr = now
-                logging.info("PR cycle complete")
+                    last_pr = now
+                    logging.info("PR cycle complete")
+
+                except Exception as e:
+                    logging.error(f"PR cycle failed: {e}")
+                    # Don't increment consecutive_failures for PR issues
+                    # PR failures are less critical than sync failures
 
             if run_once:
                 logging.info("Run once mode, exiting...")
@@ -527,11 +781,26 @@ def run_daemon(run_once: bool = False):
             # Sleep for 1 minute between checks
             time.sleep(60)
 
-    except KeyboardInterrupt:
-        logging.info("Daemon stopped by user")
-    except Exception as e:
-        logging.error(f"Daemon error: {e}")
-        raise
+        except KeyboardInterrupt:
+            logging.info("Daemon stopped by user")
+            break
+        except Exception as e:
+            # Catch any unexpected errors and try to recover
+            consecutive_failures += 1
+            logging.error(f"Unexpected daemon error: {e}")
+
+            if consecutive_failures >= max_consecutive_failures:
+                logging.error("Too many failures, attempting full recovery...")
+                try:
+                    recover_git_state()
+                    consecutive_failures = 0
+                except Exception as recovery_error:
+                    logging.critical(f"Recovery failed: {recovery_error}")
+                    # Sleep longer before retrying after recovery failure
+                    time.sleep(300)
+
+            # Continue running instead of crashing
+            time.sleep(60)
 
 
 def main():
