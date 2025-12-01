@@ -43,6 +43,6 @@ This section compiles news reports, feature articles, and official releases from
 
 ## Official Information
 
-- [**Government Press Releases**](政府新聞公報/README.md) *(Pending)*
+- [**Government Press Releases**](hkgov%20Press%20Release/README.en.md)
 - [**Fire Services Department Notices**](消防處/README.md) *(Pending)*
 - [**Buildings Department Documents**](屋宇署/README.md) *(Pending)*

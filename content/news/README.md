@@ -43,6 +43,6 @@
 
 ## 官方資料 (Official Information)
 
-- [**政府新聞公報**](政府新聞公報/README.md) *(待補)*
+- [**政府新聞公報**](hkgov%20Press%20Release/README.md)
 - [**消防處通告**](消防處/README.md) *(待補)*
 - [**屋宇署文件**](屋宇署/README.md) *(待補)*
